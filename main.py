@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import LOG_LEVEL, LOG_FORMAT
-from report_image import create_signal_report_image
+from report_image import create_common_period_report_image, create_signal_report_image
 from scanner import MarketScanner
 from scheduler import TZ_TURKEY
 from telegram_sender import get_telegram_sender
@@ -28,6 +28,7 @@ SIGNAL_BUCKET = "rsi"
 PERIODS = ["15m", "1H", "4H", "1D", "1W", "1M"]
 REPORTS_DIR = Path("reports")
 SIGNALS_PER_IMAGE = int(os.getenv("SIGNALS_PER_IMAGE", "30"))
+SUMMARY_ROWS_PER_IMAGE = int(os.getenv("SUMMARY_ROWS_PER_IMAGE", "24"))
 
 
 def normalize_period(period: str) -> str:
@@ -74,9 +75,27 @@ def format_signal_table(signals: list[dict], start_index: int = 1) -> str:
     return "\n".join(rows)
 
 
-def chunked(items: list, size: int):
-    for i in range(0, len(items), size):
-        yield items[i:i + size]
+def balanced_chunks(items: list, max_size: int) -> list[list]:
+    if not items:
+        return [items]
+
+    max_size = max(1, max_size)
+    page_count = (len(items) + max_size - 1) // max_size
+    base_size, extra = divmod(len(items), page_count)
+    chunks = []
+    start = 0
+    for index in range(page_count):
+        size = base_size + (1 if index < extra else 0)
+        chunks.append(items[start:start + size])
+        start += size
+    return chunks
+
+
+def indexed_chunks(items: list, max_size: int):
+    start_no = 1
+    for chunk in balanced_chunks(items, max_size):
+        yield start_no, chunk
+        start_no += len(chunk)
 
 
 def bucket_results(results: tuple) -> dict[str, list[dict]]:
@@ -121,9 +140,8 @@ def send_fallback_text(sender, market_type: str, period: str, signals: list[dict
         sender.send_message(base_header + "\n\n<i>Sinyal yok.</i>")
         return
 
-    chunks = list(chunked(ordered_signals, SIGNALS_PER_IMAGE))
-    for index, chunk in enumerate(chunks, start=1):
-        start_no = (index - 1) * SIGNALS_PER_IMAGE + 1
+    chunks = list(indexed_chunks(ordered_signals, SIGNALS_PER_IMAGE))
+    for index, (start_no, chunk) in enumerate(chunks, start=1):
         end_no = start_no + len(chunk) - 1
         table = html.escape(format_signal_table(chunk, start_no))
         msg = (
@@ -163,9 +181,8 @@ def send_period_summary(sender, market_type: str, period: str, signals: list[dic
             send_fallback_text(sender, market_type, period, ordered_signals, total_scanned)
         return
 
-    chunks = list(chunked(ordered_signals, SIGNALS_PER_IMAGE))
-    for index, chunk in enumerate(chunks, start=1):
-        start_no = (index - 1) * SIGNALS_PER_IMAGE + 1
+    chunks = list(indexed_chunks(ordered_signals, SIGNALS_PER_IMAGE))
+    for index, (start_no, chunk) in enumerate(chunks, start=1):
         end_no = start_no + len(chunk) - 1
         image_path = create_signal_report_image(
             brand_name=BRAND_NAME,
@@ -231,6 +248,7 @@ async def main_scan_logic(market_type: str, period: str, use_state: bool = True)
 
 def send_final_summary(all_results: list[dict]):
     sender = get_telegram_sender()
+    now = datetime.now(TZ_TURKEY).strftime("%Y-%m-%d %H:%M")
     symbol_map: dict[str, list[str]] = {}
     for result in all_results:
         period = result["period"]
@@ -241,6 +259,30 @@ def send_final_summary(all_results: list[dict]):
     repeated = {symbol: periods for symbol, periods in symbol_map.items() if len(periods) > 1}
     if not repeated:
         return
+
+    summary_rows = [
+        {"symbol": symbol, "periods": repeated[symbol]}
+        for symbol in sorted(repeated)
+    ]
+    summary_chunks = balanced_chunks(summary_rows, SUMMARY_ROWS_PER_IMAGE)
+    for index, chunk in enumerate(summary_chunks, start=1):
+        image_path = create_common_period_report_image(
+            brand_name=BRAND_NAME,
+            tarama_label=TARAMA_LABEL,
+            timestamp=now,
+            rows=chunk,
+            page=index,
+            total_pages=len(summary_chunks),
+            total_symbols=len(summary_rows),
+            output_dir=REPORTS_DIR,
+        )
+        caption = (
+            f"<b>{BRAND_NAME}</b>\n"
+            f"<b>{TARAMA_LABEL} - Coklu Periyot Ozeti</b>\n"
+            f"<code>Liste {index}/{len(summary_chunks)} | {len(chunk)}/{len(summary_rows)} hisse</code>"
+        )
+        sender.send_photo(str(image_path), caption=caption)
+        time.sleep(1)
 
     lines = [f"<b>{BRAND_NAME}</b>", f"<b>{TARAMA_LABEL} - Coklu Periyot Ozeti</b>"]
     for symbol in sorted(repeated):

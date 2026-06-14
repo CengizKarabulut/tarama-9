@@ -181,3 +181,83 @@ def create_signal_report_image(
     final_path = output_path / filename
     image.save(final_path, "PNG", optimize=True)
     return final_path
+
+
+def create_common_period_report_image(
+    brand_name: str,
+    tarama_label: str,
+    timestamp: str,
+    rows: Iterable[dict],
+    page: int,
+    total_pages: int,
+    total_symbols: int,
+    output_dir: Path | str,
+) -> Path:
+    table_rows = list(rows)
+    visible_rows = max(len(table_rows), 1)
+    row_height = 44
+    height = TOP_HEIGHT + TABLE_HEADER_HEIGHT + (visible_rows * row_height) + BOTTOM_PADDING
+
+    image = Image.new("RGB", (CANVAS_WIDTH, height), COLOR_BG)
+    draw = ImageDraw.Draw(image)
+
+    card_x0 = 28
+    card_y0 = 24
+    card_x1 = CANVAS_WIDTH - 28
+    card_y1 = height - 24
+    draw.rounded_rectangle((card_x0, card_y0, card_x1, card_y1), radius=28, fill=COLOR_CARD)
+
+    draw.text((PADDING_X, 46), brand_name, font=FONT_BRAND, fill=COLOR_BRAND)
+    draw.text((PADDING_X, 102), f"{tarama_label} - Coklu Periyot Ozeti", font=FONT_TITLE, fill=COLOR_BLUE)
+
+    badge = f"{total_symbols} hisse"
+    badge_w = _text_width(draw, badge, FONT_META_BOLD) + 42
+    draw.rounded_rectangle(
+        (CANVAS_WIDTH - PADDING_X - badge_w, 50, CANVAS_WIDTH - PADDING_X, 92),
+        radius=20,
+        fill=COLOR_HEADER,
+    )
+    draw.text((CANVAS_WIDTH - PADDING_X - badge_w + 21, 59), badge, font=FONT_META_BOLD, fill=COLOR_BLUE)
+
+    draw.text((PADDING_X, 143), timestamp, font=FONT_META, fill=COLOR_MUTED)
+    _right_text(draw, CANVAS_WIDTH - PADDING_X, 143, f"Liste {page}/{total_pages}", FONT_META_BOLD, COLOR_MUTED)
+
+    header_y = TOP_HEIGHT
+    draw.rounded_rectangle(
+        (PADDING_X, header_y, CANVAS_WIDTH - PADDING_X, header_y + TABLE_HEADER_HEIGHT),
+        radius=14,
+        fill=COLOR_HEADER,
+    )
+    draw.text((COL_SYMBOL, header_y + 12), "Sembol", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
+    draw.text((320, header_y + 12), "Periyotlar", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
+
+    row_y = header_y + TABLE_HEADER_HEIGHT
+    if not table_rows:
+        draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
+        empty_text = "Birden fazla periyotta sinyal yok"
+        empty_w = _text_width(draw, empty_text, FONT_EMPTY)
+        draw.text(((CANVAS_WIDTH - empty_w) / 2, row_y + 6), empty_text, font=FONT_EMPTY, fill=COLOR_MUTED)
+    else:
+        for index, row in enumerate(table_rows):
+            if index % 2 == 1:
+                draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
+
+            symbol = str(row.get("symbol", ""))[:12]
+            periods = ", ".join(dict.fromkeys(row.get("periods", [])))
+            draw.text((COL_SYMBOL, row_y + 10), symbol, font=FONT_ROW_BOLD, fill=COLOR_TEXT)
+            draw.text((320, row_y + 10), periods, font=FONT_ROW, fill=COLOR_TEXT)
+            draw.line((PADDING_X, row_y + row_height, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_LINE)
+            row_y += row_height
+
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    filename = "_".join(
+        [
+            _safe_filename(tarama_label),
+            "coklu-periyot-ozeti",
+            f"p{page}",
+        ]
+    ) + ".png"
+    final_path = output_path / filename
+    image.save(final_path, "PNG", optimize=True)
+    return final_path
