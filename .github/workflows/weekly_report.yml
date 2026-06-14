@@ -1,0 +1,83 @@
+name: Weekly Performance Report
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/weekly_report.yml"
+      - "weekly_report.py"
+      - "telegram_sender.py"
+      - "scanner.py"
+      - "main.py"
+      - "config.py"
+      - "requirements.txt"
+      - "report_image.py"
+  pull_request:
+    paths:
+      - ".github/workflows/weekly_report.yml"
+      - "weekly_report.py"
+      - "telegram_sender.py"
+      - "scanner.py"
+      - "main.py"
+      - "config.py"
+      - "requirements.txt"
+      - "report_image.py"
+  schedule:
+    - cron: "0 17 * * 5"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: validate weekly report code
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Python files
+        run: |
+          python -m py_compile \
+            weekly_report.py \
+            telegram_sender.py \
+            main.py \
+            scanner.py \
+            scheduler.py \
+            report_image.py
+
+  report:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate and send weekly report
+        env:
+          TV_USERNAME: ${{ secrets.TV_USERNAME }}
+          TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ vars.TG_CHAT_ID || secrets.TG_CHAT_ID }}
+          TG_THREAD_ID: ${{ vars.TG_THREAD_ID || secrets.TG_THREAD_ID }}
+        run: |
+          python weekly_report.py
