@@ -1,0 +1,102 @@
+name: Tarama 9
+
+on:
+  schedule:
+    - cron: "*/15 6-16 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      market_type:
+        description: "Taranacak pazar"
+        required: true
+        default: "bist"
+        type: choice
+        options:
+          - bist
+          - nasdaq
+          - sp500
+          - emtia
+          - kripto
+      timeframes:
+        description: "Zaman dilimi (all = hepsi)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - 15m
+          - 1H
+          - 4H
+          - 1D
+          - 1W
+          - 1M
+      use_state:
+        description: "Daha once gonderilen sinyalleri filtrele"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tarama-9-state
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scan
+        env:
+          TV_USERNAME: ${{ secrets.TV_USERNAME }}
+          TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
+          TV_CHART_ID: ${{ secrets.TV_CHART_ID }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ vars.TG_CHAT_ID }}
+          TG_THREAD_ID: ${{ vars.TG_THREAD_ID }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            python main.py auto bist
+            exit 0
+          fi
+
+          STATE_FLAG=""
+          if [ "${{ inputs.use_state }}" = "false" ]; then
+            STATE_FLAG="--nostate"
+          fi
+
+          if [ "${{ inputs.timeframes }}" = "all" ]; then
+            python main.py multi "${{ inputs.market_type }}" all $STATE_FLAG
+          else
+            python main.py scan "${{ inputs.timeframes }}" "${{ inputs.market_type }}" $STATE_FLAG
+          fi
+
+      - name: Persist state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase --autostash origin ${{ github.ref_name }} || true
+          if [ -f "state.json" ]; then
+            git add state.json
+            if ! git diff --staged --quiet; then
+              git commit -m "chore: update state.json [skip ci]"
+              git push origin HEAD:${{ github.ref_name }}
+            fi
+          fi
