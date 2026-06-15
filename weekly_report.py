@@ -9,8 +9,10 @@ import os
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 from main import BRAND_NAME, SIGNAL_BUCKET, TARAMA_LABEL
+from report_image import create_weekly_performance_report_image
 from scanner import MarketScanner
 from telegram_sender import get_telegram_sender
 from tvDatafeed import Interval
@@ -68,6 +70,8 @@ STRATEGY_META = {
 }
 
 DIVIDER = "<b>==============================</b>"
+REPORTS_DIR = Path("reports")
+WEEKLY_IMAGE_MAX_ROWS = int(os.getenv("WEEKLY_IMAGE_MAX_ROWS", "30"))
 
 
 async def get_current_price(symbol: str, scanner: MarketScanner) -> float | None:
@@ -91,6 +95,40 @@ def should_include_entry(data, meta: dict) -> bool:
     if "is_full" not in meta:
         return True
     return isinstance(data, dict) and bool(data.get("is_full")) is meta["is_full"]
+
+
+def balanced_chunks(items: list, max_size: int) -> list[list]:
+    if not items:
+        return [items]
+
+    max_size = max(1, max_size)
+    page_count = (len(items) + max_size - 1) // max_size
+    base_size, extra = divmod(len(items), page_count)
+    chunks = []
+    start = 0
+    for index in range(page_count):
+        size = base_size + (1 if index < extra else 0)
+        chunks.append(items[start:start + size])
+        start += size
+    return chunks
+
+
+def write_weekly_report_images(report_title: str, rows: list[dict]) -> list[Path]:
+    chunks = balanced_chunks(rows, WEEKLY_IMAGE_MAX_ROWS)
+    return [
+        create_weekly_performance_report_image(
+            brand_name=BRAND_NAME,
+            tarama_label=TARAMA_LABEL,
+            report_title=report_title,
+            timestamp=datetime.now().strftime("%d.%m.%Y %H:%M"),
+            rows=chunk,
+            page=index,
+            total_pages=len(chunks),
+            total_rows=len(rows),
+            output_dir=REPORTS_DIR,
+        )
+        for index, chunk in enumerate(chunks, start=1)
+    ]
 
 
 async def build_rows(state: dict) -> tuple[dict[str, list[dict]], list[dict]]:
@@ -184,12 +222,17 @@ def signal_lines(rows: list[dict]) -> str:
 
 
 async def generate_weekly_report() -> list[str]:
+    messages, _ = await generate_weekly_report_with_images()
+    return messages
+
+
+async def generate_weekly_report_with_images() -> tuple[list[str], list[Path]]:
     if SIGNAL_BUCKET not in STRATEGY_META:
-        return [f"<b>{html.escape(TARAMA_LABEL)} icin haftalik rapor metasi bulunamadi.</b>"]
+        return [f"<b>{html.escape(TARAMA_LABEL)} icin haftalik rapor metasi bulunamadi.</b>"], []
 
     state_file = "state.json"
     if not os.path.exists(state_file):
-        return ["<b>state.json bulunamadi.</b>"]
+        return ["<b>state.json bulunamadi.</b>"], []
 
     with open(state_file, "r", encoding="utf-8") as file:
         state = json.load(file)
@@ -232,7 +275,7 @@ async def generate_weekly_report() -> list[str]:
         )
 
     if not all_rows:
-        return [f"<b>{html.escape(TARAMA_LABEL)} icin bu hafta sinyal uretilmedi.</b>"]
+        return [f"<b>{html.escape(TARAMA_LABEL)} icin bu hafta sinyal uretilmedi.</b>"], []
 
     distribution = "\n".join(
         f"- {PERIOD_NAMES[period]}: {len(grouped[period])}"
@@ -246,7 +289,7 @@ async def generate_weekly_report() -> list[str]:
         f"<b>Zaman dilimi dagilimi:</b>\n{distribution}\n"
         f"{DIVIDER}"
     )
-    return messages
+    return messages, write_weekly_report_images(display_title, all_rows)
 
 
 def send_chunked(sender, text: str):
@@ -268,8 +311,14 @@ def send_chunked(sender, text: str):
 
 if __name__ == "__main__":
     async def main():
-        messages = await generate_weekly_report()
+        messages, image_paths = await generate_weekly_report_with_images()
         sender = get_telegram_sender()
+        for index, image_path in enumerate(image_paths):
+            caption = f"<b>{html.escape(TARAMA_LABEL)} Haftalik Rapor</b>"
+            if len(image_paths) > 1:
+                caption += f" | Gorsel {index + 1}/{len(image_paths)}"
+            sender.send_photo(str(image_path), caption=caption)
+            time.sleep(1)
         for index, message in enumerate(messages):
             send_chunked(sender, message)
             if index < len(messages) - 1:
