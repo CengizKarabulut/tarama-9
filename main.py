@@ -62,19 +62,6 @@ def parse_period_selection(period_selection: str) -> list[str]:
     return selected_periods or PERIODS
 
 
-def format_signal_table(signals: list[dict], start_index: int = 1) -> str:
-    rows = [
-        "No Sembol       Deg%    Kapanis",
-        "-- -------- -------- ----------",
-    ]
-    for offset, signal in enumerate(signals, start=start_index):
-        symbol = str(signal.get("symbol", ""))[:8]
-        close = float(signal.get("close", 0) or 0)
-        change = float(signal.get("change", 0) or 0)
-        rows.append(f"{offset:>2} {symbol:<8} {change:>+7.2f}% {close:>10.2f}")
-    return "\n".join(rows)
-
-
 def balanced_chunks(items: list, max_size: int) -> list[list]:
     if not items:
         return [items]
@@ -125,34 +112,6 @@ def bucket_results(results: tuple) -> dict[str, list[dict]]:
     }
 
 
-def send_fallback_text(sender, market_type: str, period: str, signals: list[dict], total_scanned: int):
-    now = datetime.now(TZ_TURKEY).strftime("%Y-%m-%d %H:%M")
-    ordered_signals = sorted(signals, key=lambda item: str(item.get("symbol", "")))
-    base_header = (
-        f"<b>{BRAND_NAME}</b>\n"
-        f"<b>{TARAMA_LABEL}</b>\n"
-        f"<code>{html.escape(market_type.upper())} | {html.escape(period)} | "
-        f"{total_scanned} sembol | {len(ordered_signals)} sinyal</code>\n"
-        f"<code>{now}</code>"
-    )
-
-    if not ordered_signals:
-        sender.send_message(base_header + "\n\n<i>Sinyal yok.</i>")
-        return
-
-    chunks = list(indexed_chunks(ordered_signals, SIGNALS_PER_IMAGE))
-    for index, (start_no, chunk) in enumerate(chunks, start=1):
-        end_no = start_no + len(chunk) - 1
-        table = html.escape(format_signal_table(chunk, start_no))
-        msg = (
-            base_header
-            + f"\n<code>Liste {index}/{len(chunks)} | {start_no}-{end_no}/{len(ordered_signals)}</code>\n\n"
-            + f"<pre>{table}</pre>"
-        )
-        sender.send_message(msg)
-        time.sleep(1)
-
-
 def send_period_summary(sender, market_type: str, period: str, signals: list[dict], total_scanned: int):
     now = datetime.now(TZ_TURKEY).strftime("%Y-%m-%d %H:%M")
     ordered_signals = sorted(signals, key=lambda item: str(item.get("symbol", "")))
@@ -178,7 +137,7 @@ def send_period_summary(sender, market_type: str, period: str, signals: list[dic
             f"<i>Sinyal yok.</i>"
         )
         if not sender.send_photo(str(image_path), caption=caption):
-            send_fallback_text(sender, market_type, period, ordered_signals, total_scanned)
+            logger.error("%s %s %s icin gorsel bildirim gonderilemedi.", TARAMA_LABEL, market_type, period)
         return
 
     chunks = list(indexed_chunks(ordered_signals, SIGNALS_PER_IMAGE))
@@ -204,7 +163,7 @@ def send_period_summary(sender, market_type: str, period: str, signals: list[dic
             f"<code>Liste {index}/{len(chunks)} | {start_no}-{end_no}/{len(ordered_signals)}</code>"
         )
         if not sender.send_photo(str(image_path), caption=caption):
-            send_fallback_text(sender, market_type, period, ordered_signals, total_scanned)
+            logger.error("%s %s %s icin gorsel bildirim gonderilemedi.", TARAMA_LABEL, market_type, period)
             return
         time.sleep(1)
 
@@ -283,13 +242,6 @@ def send_final_summary(all_results: list[dict]):
         )
         sender.send_photo(str(image_path), caption=caption)
         time.sleep(1)
-
-    lines = [f"<b>{BRAND_NAME}</b>", f"<b>{TARAMA_LABEL} - Coklu Periyot Ozeti</b>"]
-    for symbol in sorted(repeated):
-        periods = ", ".join(repeated[symbol])
-        lines.append(f"- <code>{html.escape(symbol)}</code>: {html.escape(periods)}")
-
-    sender.send_message("\n".join(lines))
 
 
 async def run_selected_periods(market_type: str = "bist", period_selection: str = "all", use_state: bool = True):

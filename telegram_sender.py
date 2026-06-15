@@ -7,13 +7,17 @@ import logging
 import os
 import re
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import requests
+from PIL import Image, ImageDraw, ImageFont
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_THREAD_ID
 
 logger = logging.getLogger(__name__)
+ERROR_REPORTS_DIR = Path("reports")
 
 
 class TelegramSender:
@@ -116,8 +120,57 @@ class TelegramSender:
                     time.sleep(2)
         return False
 
+    def _font(self, size: int, bold: bool = False) -> ImageFont.ImageFont:
+        candidates = [
+            "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
+            "Arial Bold.ttf" if bold else "Arial.ttf",
+            "arialbd.ttf" if bold else "arial.ttf",
+        ]
+        for name in candidates:
+            try:
+                return ImageFont.truetype(name, size)
+            except OSError:
+                continue
+        return ImageFont.load_default()
+
+    def _write_error_image(self, error_msg: str) -> Path:
+        import textwrap
+
+        ERROR_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        width = 1200
+        padding_x = 56
+        lines = textwrap.wrap(str(error_msg), width=84) or ["Bilinmeyen hata"]
+        visible_lines = lines[:24]
+        height = max(420, 245 + len(visible_lines) * 34)
+
+        image = Image.new("RGB", (width, height), "#FEF2F2")
+        draw = ImageDraw.Draw(image)
+        font_title = self._font(42, True)
+        font_meta = self._font(22)
+        font_body = self._font(24)
+
+        draw.rounded_rectangle((28, 24, width - 28, height - 24), radius=28, fill="#FFFFFF")
+        draw.rounded_rectangle((28, 24, width - 28, 142), radius=28, fill="#991B1B")
+        draw.rectangle((28, 82, width - 28, 142), fill="#991B1B")
+        draw.text((padding_x, 52), "HATA BILDIRIMI", font=font_title, fill="#FFFFFF")
+        draw.text((padding_x, 156), datetime.now().strftime("%d.%m.%Y %H:%M"), font=font_meta, fill="#7F1D1D")
+
+        y = 210
+        for line in visible_lines:
+            draw.text((padding_x, y), line, font=font_body, fill="#7F1D1D")
+            y += 34
+
+        path = ERROR_REPORTS_DIR / f"error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        image.save(path, "PNG", optimize=True)
+        return path
+
     def send_error(self, error_msg: str) -> bool:
-        return self.send_message(f"<b>HATA</b>\n\n{html.escape(error_msg)}")
+        try:
+            image_path = self._write_error_image(error_msg)
+            return self.send_photo(str(image_path), caption="<b>HATA</b>")
+        except Exception as exc:
+            logger.error("Error image could not be created: %s", exc)
+            return False
 
 
 _sender_instance: Optional[TelegramSender] = None

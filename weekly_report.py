@@ -292,26 +292,9 @@ async def generate_weekly_report_with_images() -> tuple[list[str], list[Path]]:
     return messages, write_weekly_report_images(display_title, all_rows)
 
 
-def send_chunked(sender, text: str):
-    limit = 3500
-    if len(text) <= limit:
-        sender.send_message(text)
-        return
-
-    buffer = ""
-    for line in text.split("\n"):
-        if len(buffer) + len(line) + 1 > limit:
-            sender.send_message(buffer)
-            time.sleep(0.5)
-            buffer = ""
-        buffer += line + "\n"
-    if buffer.strip():
-        sender.send_message(buffer)
-
-
 if __name__ == "__main__":
     async def main():
-        messages, image_paths = await generate_weekly_report_with_images()
+        _, image_paths = await generate_weekly_report_with_images()
         sender = get_telegram_sender()
         for index, image_path in enumerate(image_paths):
             caption = f"<b>{html.escape(TARAMA_LABEL)} Haftalik Rapor</b>"
@@ -319,9 +302,5 @@ if __name__ == "__main__":
                 caption += f" | Gorsel {index + 1}/{len(image_paths)}"
             sender.send_photo(str(image_path), caption=caption)
             time.sleep(1)
-        for index, message in enumerate(messages):
-            send_chunked(sender, message)
-            if index < len(messages) - 1:
-                time.sleep(1.2)
 
     asyncio.run(main())
