@@ -3,6 +3,9 @@ name: Tarama 9
 on:
   schedule:
     - cron: "*/15 6-16 * * 1-5"
+  repository_dispatch:
+    types:
+      - tarama-9-auto-scan
   workflow_dispatch:
     inputs:
       market_type:
@@ -71,7 +74,7 @@ jobs:
           TG_CHAT_ID: ${{ vars.TG_CHAT_ID }}
           TG_THREAD_ID: ${{ vars.TG_THREAD_ID }}
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             python main.py auto bist
             exit 0
           fi
