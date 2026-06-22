@@ -1,4 +1,4 @@
-name: Tarama 9
+name: Tarama 9 - 1M
 
 on:
   schedule:
@@ -19,19 +19,6 @@ on:
           - sp500
           - emtia
           - kripto
-      timeframes:
-        description: "Zaman dilimi (all = hepsi)"
-        required: true
-        default: "all"
-        type: choice
-        options:
-          - all
-          - 15m
-          - 1H
-          - 4H
-          - 1D
-          - 1W
-          - 1M
       use_state:
         description: "Daha once gonderilen sinyalleri filtrele"
         required: true
@@ -71,8 +58,8 @@ jobs:
           TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
           TV_CHART_ID: ${{ secrets.TV_CHART_ID }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID: ${{ vars.TG_CHAT_ID }}
-          TG_THREAD_ID: ${{ vars.TG_THREAD_ID }}
+          TG_CHAT_ID: ${{ vars.TG_CHAT_ID || secrets.TG_CHAT_ID }}
+          TG_THREAD_ID: ${{ vars.TG_THREAD_ID || secrets.TG_THREAD_ID }}
         run: |
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             python main.py auto bist
@@ -84,11 +71,7 @@ jobs:
             STATE_FLAG="--nostate"
           fi
 
-          if [ "${{ inputs.timeframes }}" = "all" ]; then
-            python main.py multi "${{ inputs.market_type }}" all $STATE_FLAG
-          else
-            python main.py scan "${{ inputs.timeframes }}" "${{ inputs.market_type }}" $STATE_FLAG
-          fi
+          python main.py scan "${{ inputs.market_type }}" $STATE_FLAG
 
       - name: Persist state
         if: always()

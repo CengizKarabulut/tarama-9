@@ -1,6 +1,6 @@
 """
-Single strategy market scanner entrypoint.
-This repository intentionally reports only Tarama 9.
+Timeframe-based market scanner entrypoint.
+This repository scans Aylik (1M) with all signal buckets.
 """
 
 import asyncio
@@ -23,43 +23,52 @@ logger = logging.getLogger(__name__)
 
 BRAND_NAME = "StockMarketLab"
 TARAMA_LABEL = "Tarama 9"
-STRATEGY_KEY = "rsi"
-SIGNAL_BUCKET = "rsi"
-PERIODS = ["15m", "1H", "4H", "1D", "1W", "1M"]
+TIMEFRAME_LABEL = "Aylik"
+FIXED_PERIOD = "1M"
 REPORTS_DIR = Path("reports")
 SIGNALS_PER_IMAGE = int(os.getenv("SIGNALS_PER_IMAGE", "30"))
 SUMMARY_ROWS_PER_IMAGE = int(os.getenv("SUMMARY_ROWS_PER_IMAGE", "24"))
+SEND_EMPTY_BUCKET_REPORTS = os.getenv("SEND_EMPTY_BUCKET_REPORTS", "true").lower() == "true"
+
+BUCKETS = [
+    ("macd_cross", "macd_cross", "T1 MACD Cross"),
+    ("h8", "h8", "T2 H8"),
+    ("i9", "i9", "T3 I9"),
+    ("ema", "ema", "T4 EMA"),
+    ("rsi_macd", "rsi_macd", "T5 RSI MACD"),
+    ("new_scan", "new_scan", "T6 Yeni Tarama"),
+    ("smi_macd", "full", "T7 Tam SMI/MACD"),
+    ("smi_macd", "smi", "T8 SMI/MACD"),
+    ("rsi", "rsi", "T9 RSI"),
+]
+ENABLED_STRATEGIES = list(dict.fromkeys(strategy for strategy, _, _ in BUCKETS))
+KNOWN_PERIODS = ["15m", "30m", "45m", "1H", "2H", "4H", "1D", "1W", "1M"]
 
 
 def normalize_period(period: str) -> str:
     period_map = {
-        "15m": "15m", "15M": "15m",
+        "15": "15m", "15m": "15m", "15M": "15m",
+        "30": "30m", "30m": "30m", "30M": "30m",
+        "45": "45m", "45m": "45m", "45M": "45m",
         "1h": "1H", "1H": "1H",
+        "2h": "2H", "2H": "2H",
         "4h": "4H", "4H": "4H",
         "1d": "1D", "1D": "1D",
         "1w": "1W", "1W": "1W",
         "1mo": "1M", "1MO": "1M",
         "1m": "1M", "1M": "1M",
     }
-    return period_map.get(period.strip(), period.strip())
+    return period_map.get((period or "").strip(), (period or "").strip())
 
 
-def parse_period_selection(period_selection: str) -> list[str]:
-    selection = (period_selection or "all").strip()
-    if selection.lower() in {"all", "hepsi", "multi"}:
-        return PERIODS
-
-    selected_periods: list[str] = []
-    for raw_period in selection.replace(";", ",").split(","):
-        if not raw_period.strip():
-            continue
-        period = normalize_period(raw_period)
-        if period not in PERIODS:
-            raise ValueError(f"Gecersiz zaman dilimi: {raw_period}")
-        if period not in selected_periods:
-            selected_periods.append(period)
-
-    return selected_periods or PERIODS
+def resolve_scan_args(args: list[str]) -> tuple[str, str]:
+    if len(args) >= 2:
+        maybe_period = normalize_period(args[0])
+        if maybe_period in KNOWN_PERIODS:
+            return maybe_period, args[1].lower()
+    if args:
+        return FIXED_PERIOD, args[0].lower()
+    return FIXED_PERIOD, "bist"
 
 
 def balanced_chunks(items: list, max_size: int) -> list[list]:
@@ -85,7 +94,7 @@ def indexed_chunks(items: list, max_size: int):
         start_no += len(chunk)
 
 
-def bucket_results(results: tuple) -> dict[str, list[dict]]:
+def bucket_results(results: tuple) -> dict[str, list[dict] | int]:
     (
         full_signals,
         smi_signals,
@@ -112,14 +121,24 @@ def bucket_results(results: tuple) -> dict[str, list[dict]]:
     }
 
 
-def send_period_summary(sender, market_type: str, period: str, signals: list[dict], total_scanned: int):
+def send_bucket_summary(
+    sender,
+    market_type: str,
+    period: str,
+    bucket_label: str,
+    signals: list[dict],
+    total_scanned: int,
+):
     now = datetime.now(TZ_TURKEY).strftime("%Y-%m-%d %H:%M")
     ordered_signals = sorted(signals, key=lambda item: str(item.get("symbol", "")))
+    report_label = f"{TARAMA_LABEL} - {TIMEFRAME_LABEL} - {bucket_label}"
 
     if not ordered_signals:
+        if not SEND_EMPTY_BUCKET_REPORTS:
+            return
         image_path = create_signal_report_image(
             brand_name=BRAND_NAME,
-            tarama_label=TARAMA_LABEL,
+            tarama_label=report_label,
             market_type=market_type.upper(),
             period=period,
             timestamp=now,
@@ -133,11 +152,11 @@ def send_period_summary(sender, market_type: str, period: str, signals: list[dic
         )
         caption = (
             f"<b>{BRAND_NAME}</b>\n"
-            f"<b>{TARAMA_LABEL}</b> | <code>{html.escape(market_type.upper())} {html.escape(period)}</code>\n"
+            f"<b>{html.escape(report_label)}</b> | <code>{html.escape(market_type.upper())} {html.escape(period)}</code>\n"
             f"<i>Sinyal yok.</i>"
         )
         if not sender.send_photo(str(image_path), caption=caption):
-            logger.error("%s %s %s icin gorsel bildirim gonderilemedi.", TARAMA_LABEL, market_type, period)
+            logger.error("%s %s %s icin gorsel bildirim gonderilemedi.", report_label, market_type, period)
         return
 
     chunks = list(indexed_chunks(ordered_signals, SIGNALS_PER_IMAGE))
@@ -145,7 +164,7 @@ def send_period_summary(sender, market_type: str, period: str, signals: list[dic
         end_no = start_no + len(chunk) - 1
         image_path = create_signal_report_image(
             brand_name=BRAND_NAME,
-            tarama_label=TARAMA_LABEL,
+            tarama_label=report_label,
             market_type=market_type.upper(),
             period=period,
             timestamp=now,
@@ -159,106 +178,112 @@ def send_period_summary(sender, market_type: str, period: str, signals: list[dic
         )
         caption = (
             f"<b>{BRAND_NAME}</b>\n"
-            f"<b>{TARAMA_LABEL}</b> | <code>{html.escape(market_type.upper())} {html.escape(period)}</code>\n"
+            f"<b>{html.escape(report_label)}</b> | <code>{html.escape(market_type.upper())} {html.escape(period)}</code>\n"
             f"<code>Liste {index}/{len(chunks)} | {start_no}-{end_no}/{len(ordered_signals)}</code>"
         )
         if not sender.send_photo(str(image_path), caption=caption):
-            logger.error("%s %s %s icin gorsel bildirim gonderilemedi.", TARAMA_LABEL, market_type, period)
+            logger.error("%s %s %s icin gorsel bildirim gonderilemedi.", report_label, market_type, period)
             return
         time.sleep(1)
 
 
-async def main_scan_logic(market_type: str, period: str, use_state: bool = True):
+async def main_scan_logic(market_type: str, period: str = FIXED_PERIOD, use_state: bool = True):
     scanner = MarketScanner()
     sender = get_telegram_sender()
-    period = normalize_period(period)
+    period = normalize_period(period) or FIXED_PERIOD
 
     logger.info(
-        "%s baslatiliyor: market=%s period=%s state=%s",
+        "%s baslatiliyor: timeframe=%s market=%s period=%s state=%s strategies=%s",
         TARAMA_LABEL,
+        TIMEFRAME_LABEL,
         market_type,
         period,
         use_state,
+        ",".join(ENABLED_STRATEGIES),
     )
 
     try:
         raw_results = await scanner.scan_market(
             market_type=market_type,
             period=period,
-            strategies=[STRATEGY_KEY],
+            strategies=ENABLED_STRATEGIES,
             use_state=use_state,
         )
         results = bucket_results(raw_results)
-        signals = results[SIGNAL_BUCKET]
-        total_scanned = results["total_scanned"]
+        total_scanned = int(results["total_scanned"])
 
-        send_period_summary(sender, market_type, period, signals, total_scanned)
+        bucket_payloads = []
+        for _, bucket_key, bucket_label in BUCKETS:
+            signals = list(results[bucket_key])
+            send_bucket_summary(sender, market_type, period, bucket_label, signals, total_scanned)
+            bucket_payloads.append({"key": bucket_key, "label": bucket_label, "signals": signals})
 
-        return {
+        scan_result = {
             "period": period,
-            "signals": signals,
+            "market_type": market_type,
             "total_scanned": total_scanned,
+            "buckets": bucket_payloads,
         }
+        send_common_scan_summary(scan_result)
+        return scan_result
     except Exception as exc:
         logger.error("%s sirasinda hata: %s", TARAMA_LABEL, exc, exc_info=True)
         sender.send_error(f"{BRAND_NAME}\n{TARAMA_LABEL} sirasinda hata: {html.escape(str(exc))}")
         return None
 
 
-def send_final_summary(all_results: list[dict]):
+def send_common_scan_summary(scan_result: dict):
     sender = get_telegram_sender()
     now = datetime.now(TZ_TURKEY).strftime("%Y-%m-%d %H:%M")
     symbol_map: dict[str, list[str]] = {}
-    for result in all_results:
-        period = result["period"]
-        for signal in result["signals"]:
-            symbol = str(signal.get("symbol", ""))
-            symbol_map.setdefault(symbol, []).append(period)
 
-    repeated = {symbol: periods for symbol, periods in symbol_map.items() if len(periods) > 1}
+    for bucket in scan_result["buckets"]:
+        bucket_label = bucket["label"]
+        seen_in_bucket = set()
+        for signal in bucket["signals"]:
+            symbol = str(signal.get("symbol", ""))
+            if not symbol or symbol in seen_in_bucket:
+                continue
+            seen_in_bucket.add(symbol)
+            symbol_map.setdefault(symbol, [])
+            if bucket_label not in symbol_map[symbol]:
+                symbol_map[symbol].append(bucket_label)
+
+    repeated = {symbol: labels for symbol, labels in symbol_map.items() if len(labels) > 1}
     if not repeated:
         return
 
     summary_rows = [
-        {"symbol": symbol, "periods": repeated[symbol]}
+        {"symbol": symbol, "scans": repeated[symbol]}
         for symbol in sorted(repeated)
     ]
     summary_chunks = balanced_chunks(summary_rows, SUMMARY_ROWS_PER_IMAGE)
     for index, chunk in enumerate(summary_chunks, start=1):
         image_path = create_common_period_report_image(
             brand_name=BRAND_NAME,
-            tarama_label=TARAMA_LABEL,
+            tarama_label=f"{TARAMA_LABEL} - {TIMEFRAME_LABEL}",
             timestamp=now,
             rows=chunk,
             page=index,
             total_pages=len(summary_chunks),
             total_symbols=len(summary_rows),
             output_dir=REPORTS_DIR,
+            summary_title=f"{TARAMA_LABEL} - {TIMEFRAME_LABEL} Coklu Tarama Ozeti",
+            column_title="Taramalar",
+            empty_text="Birden fazla taramada sinyal yok",
+            filename_suffix="coklu-tarama-ozeti",
         )
         caption = (
             f"<b>{BRAND_NAME}</b>\n"
-            f"<b>{TARAMA_LABEL} - Coklu Periyot Ozeti</b>\n"
+            f"<b>{TARAMA_LABEL} - {TIMEFRAME_LABEL} - Coklu Tarama Ozeti</b>\n"
             f"<code>Liste {index}/{len(summary_chunks)} | {len(chunk)}/{len(summary_rows)} hisse</code>"
         )
         sender.send_photo(str(image_path), caption=caption)
         time.sleep(1)
 
 
-async def run_selected_periods(market_type: str = "bist", period_selection: str = "all", use_state: bool = True):
-    selected_periods = parse_period_selection(period_selection)
-    all_results = []
-    for period in selected_periods:
-        result = await main_scan_logic(market_type, period, use_state=use_state)
-        if result:
-            all_results.append(result)
-        await asyncio.sleep(3)
-
-    if len(selected_periods) > 1 and all_results:
-        send_final_summary(all_results)
-
-
-async def run_multi_scan(market_type: str = "bist", use_state: bool = True):
-    await run_selected_periods(market_type, "all", use_state=use_state)
+async def run_fixed_scan(market_type: str = "bist", period: str = FIXED_PERIOD, use_state: bool = True):
+    await main_scan_logic(market_type, period, use_state=use_state)
 
 
 async def run_bot():
@@ -268,26 +293,25 @@ async def run_bot():
 
     if args:
         command = args[0]
+        command_args = args[1:]
         if command == "scan":
-            period = args[1] if len(args) > 1 else "1D"
-            market_type = args[2].lower() if len(args) > 2 else "bist"
+            period, market_type = resolve_scan_args(command_args)
             await main_scan_logic(market_type, period, use_state=(not nostate))
         elif command == "multi":
-            market_type = args[1].lower() if len(args) > 1 else "bist"
-            period_selection = args[2] if len(args) > 2 else "all"
-            await run_selected_periods(market_type, period_selection, use_state=(not nostate))
+            period, market_type = resolve_scan_args(command_args)
+            await run_fixed_scan(market_type, period, use_state=(not nostate))
         elif command == "auto":
             from scheduler import get_scheduler
 
             scheduler = get_scheduler()
-            auto_args = args[1:]
+            auto_args = [arg for arg in command_args if not arg.startswith("--")]
             market_type = auto_args[0].lower() if auto_args else "bist"
 
-            async def run_multi_scan_with_state(selected_market_type):
-                await run_multi_scan(selected_market_type, use_state=(not nostate))
+            async def run_fixed_scan_with_state(selected_market_type):
+                await run_fixed_scan(selected_market_type, FIXED_PERIOD, use_state=(not nostate))
 
             await scheduler.run_once_if_needed(
-                run_multi_scan_with_state,
+                run_fixed_scan_with_state,
                 market_type=market_type,
                 force=force,
             )
@@ -298,7 +322,7 @@ async def run_bot():
         from scheduler import get_scheduler
 
         scheduler = get_scheduler()
-        await scheduler.start(run_multi_scan, market_type="bist")
+        await scheduler.start(run_fixed_scan, market_type="bist")
 
 
 if __name__ == "__main__":

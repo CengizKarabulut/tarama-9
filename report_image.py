@@ -192,6 +192,10 @@ def create_common_period_report_image(
     total_pages: int,
     total_symbols: int,
     output_dir: Path | str,
+    summary_title: str | None = None,
+    column_title: str = "Periyotlar",
+    empty_text: str = "Birden fazla periyotta sinyal yok",
+    filename_suffix: str = "coklu-periyot-ozeti",
 ) -> Path:
     table_rows = list(rows)
     visible_rows = max(len(table_rows), 1)
@@ -208,7 +212,7 @@ def create_common_period_report_image(
     draw.rounded_rectangle((card_x0, card_y0, card_x1, card_y1), radius=28, fill=COLOR_CARD)
 
     draw.text((PADDING_X, 46), brand_name, font=FONT_BRAND, fill=COLOR_BRAND)
-    draw.text((PADDING_X, 102), f"{tarama_label} - Coklu Periyot Ozeti", font=FONT_TITLE, fill=COLOR_BLUE)
+    draw.text((PADDING_X, 102), summary_title or f"{tarama_label} - Coklu Periyot Ozeti", font=FONT_TITLE, fill=COLOR_BLUE)
 
     badge = f"{total_symbols} hisse"
     badge_w = _text_width(draw, badge, FONT_META_BOLD) + 42
@@ -229,12 +233,11 @@ def create_common_period_report_image(
         fill=COLOR_HEADER,
     )
     draw.text((COL_SYMBOL, header_y + 12), "Sembol", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
-    draw.text((320, header_y + 12), "Periyotlar", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
+    draw.text((320, header_y + 12), column_title, font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
 
     row_y = header_y + TABLE_HEADER_HEIGHT
     if not table_rows:
         draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
-        empty_text = "Birden fazla periyotta sinyal yok"
         empty_w = _text_width(draw, empty_text, FONT_EMPTY)
         draw.text(((CANVAS_WIDTH - empty_w) / 2, row_y + 6), empty_text, font=FONT_EMPTY, fill=COLOR_MUTED)
     else:
@@ -243,7 +246,7 @@ def create_common_period_report_image(
                 draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
 
             symbol = str(row.get("symbol", ""))[:12]
-            periods = ", ".join(dict.fromkeys(row.get("periods", [])))
+            periods = ", ".join(dict.fromkeys(row.get("periods", row.get("scans", []))))
             draw.text((COL_SYMBOL, row_y + 10), symbol, font=FONT_ROW_BOLD, fill=COLOR_TEXT)
             draw.text((320, row_y + 10), periods, font=FONT_ROW, fill=COLOR_TEXT)
             draw.line((PADDING_X, row_y + row_height, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_LINE)
@@ -254,7 +257,7 @@ def create_common_period_report_image(
     filename = "_".join(
         [
             _safe_filename(tarama_label),
-            "coklu-periyot-ozeti",
+            _safe_filename(filename_suffix),
             f"p{page}",
         ]
     ) + ".png"

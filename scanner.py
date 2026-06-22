@@ -148,7 +148,7 @@ class MarketScanner:
                 last_bar_time = df.index[-1]
                 now = datetime.now(last_bar_time.tzinfo)
                 # Hafta sonu boşluğunu kapsayacak şekilde 90 saate esnetildi.
-                if interval in [Interval.in_15_minute, Interval.in_1_hour, Interval.in_4_hour]:
+                if interval in [Interval.in_15_minute, Interval.in_30_minute, Interval.in_45_minute, Interval.in_1_hour, Interval.in_2_hour, Interval.in_4_hour]:
                     if (now - last_bar_time).total_seconds() > 324000: # 90 saat
                         return None
             
@@ -224,7 +224,10 @@ class MarketScanner:
         # Zaman dilimini TvDatafeed formatına çevir
         interval_map = {
             "15m": Interval.in_15_minute, "15M": Interval.in_15_minute,
+            "30m": Interval.in_30_minute, "30M": Interval.in_30_minute,
+            "45m": Interval.in_45_minute, "45M": Interval.in_45_minute,
             "1h": Interval.in_1_hour, "1H": Interval.in_1_hour,
+            "2h": Interval.in_2_hour, "2H": Interval.in_2_hour,
             "4h": Interval.in_4_hour, "4H": Interval.in_4_hour,
             "1d": Interval.in_daily, "1D": Interval.in_daily,
             "1w": Interval.in_weekly, "1W": Interval.in_weekly,
@@ -300,7 +303,7 @@ class MarketScanner:
                 if i9_res["full_signal"] and (not use_state or not self.state.is_signal_sent(sym, p, "i9", bar_time)):
                     i9_signals.append(result)
                     if use_state: self.state.mark_signal_sent(sym, p, "i9", bar_time, close)
-                elif i9_res["h8_signal"] and (not use_state or not self.state.is_signal_sent(sym, p, "h8", bar_time)):
+                elif "h8" not in result["signals"] and i9_res["h8_signal"] and (not use_state or not self.state.is_signal_sent(sym, p, "h8", bar_time)):
                     h8_signals.append(result)
                     if use_state: self.state.mark_signal_sent(sym, p, "h8", bar_time, close)
         
