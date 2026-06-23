@@ -1,4 +1,4 @@
-name: Tarama Keepalive Scheduler
+name: Aylik Bot Zamanlayici
 
 on:
   push:

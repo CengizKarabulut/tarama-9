@@ -1,5 +1,5 @@
 """
-Weekly performance report for a single tarama repository.
+Weekly performance report for a single timeframe repository.
 """
 
 import asyncio
@@ -11,17 +11,20 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from main import BRAND_NAME, SIGNAL_BUCKET, TARAMA_LABEL
+from main import BRAND_NAME, TARAMA_LABEL
 from report_image import create_weekly_performance_report_image
 from scanner import MarketScanner
 from telegram_sender import get_telegram_sender
 from tvDatafeed import Interval
 
 
-PERIOD_ORDER = ["15m", "1H", "4H", "1D", "1W", "1M"]
+PERIOD_ORDER = ["15m", "30m", "45m", "1H", "2H", "4H", "1D", "1W", "1M"]
 PERIOD_NAMES = {
     "15m": "15 DAKIKA",
+    "30m": "30 DAKIKA",
+    "45m": "45 DAKIKA",
     "1H": "1 SAAT",
+    "2H": "2 SAAT",
     "4H": "4 SAAT",
     "1D": "GUNLUK",
     "1W": "HAFTALIK",
@@ -31,41 +34,41 @@ PERIOD_NAMES = {
 STRATEGY_META = {
     "macd_cross": {
         "state_key": "last_sent_macd_cross",
-        "title": "S1 - MACD Pozitif Kesisim",
+        "title": "M-1 - MACD Pozitif Kesisim",
     },
     "h8": {
         "state_key": "last_sent_h8",
-        "title": "H8 - SMI/MACD Pozitif",
+        "title": "S-M-1 - SMI/MACD Momentum",
     },
     "i9": {
         "state_key": "last_sent_i9",
-        "title": "I9 - SMI/MACD Pozitif Full",
+        "title": "S-M-V-1 - SMI/MACD Guclu Onay",
     },
     "ema": {
         "state_key": "last_sent_ema",
-        "title": "S2 - EMA Dizilimi",
+        "title": "E-V-1 - EMA Trend + Hacim",
     },
     "rsi_macd": {
         "state_key": "last_sent_rsi_macd",
-        "title": "S3 - RSI + MACD + Hacim",
+        "title": "R-M-V-1 - RSI + MACD + Hacim",
     },
     "new_scan": {
         "state_key": "last_sent_new_scan",
-        "title": "S4 - SMA + MACD + Hacim",
+        "title": "A-M-V-1 - SMA + MACD + Hacim",
     },
     "full": {
         "state_key": "last_sent_smi_macd",
-        "title": "S5 - SMI/MACD Full",
+        "title": "S-M-V-2 - SMI/MACD Full",
         "is_full": True,
     },
     "smi": {
         "state_key": "last_sent_smi_macd",
-        "title": "S6 - SMI/MACD",
+        "title": "S-M-2 - SMI/MACD Erken",
         "is_full": False,
     },
     "rsi": {
         "state_key": "last_sent_rsi",
-        "title": "S7 - RSI",
+        "title": "R-V-1 - RSI Momentum",
     },
 }
 
@@ -131,8 +134,8 @@ def write_weekly_report_images(report_title: str, rows: list[dict]) -> list[Path
     ]
 
 
-async def build_rows(state: dict) -> tuple[dict[str, list[dict]], list[dict]]:
-    meta = STRATEGY_META[SIGNAL_BUCKET]
+async def build_rows(state: dict, strategy_key: str) -> tuple[dict[str, list[dict]], list[dict]]:
+    meta = STRATEGY_META[strategy_key]
     entries = state.get(meta["state_key"], {})
     grouped = {period: [] for period in PERIOD_ORDER}
     unknown_period = []
@@ -221,24 +224,9 @@ def signal_lines(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def generate_weekly_report() -> list[str]:
-    messages, _ = await generate_weekly_report_with_images()
-    return messages
-
-
-async def generate_weekly_report_with_images() -> tuple[list[str], list[Path]]:
-    if SIGNAL_BUCKET not in STRATEGY_META:
-        return [f"<b>{html.escape(TARAMA_LABEL)} icin haftalik rapor metasi bulunamadi.</b>"], []
-
-    state_file = "state.json"
-    if not os.path.exists(state_file):
-        return ["<b>state.json bulunamadi.</b>"], []
-
-    with open(state_file, "r", encoding="utf-8") as file:
-        state = json.load(file)
-
-    grouped, unknown_period = await build_rows(state)
-    meta = STRATEGY_META[SIGNAL_BUCKET]
+async def build_strategy_report(strategy_key: str, state: dict) -> tuple[list[str], list[Path]]:
+    grouped, unknown_period = await build_rows(state, strategy_key)
+    meta = STRATEGY_META[strategy_key]
     display_title = meta["title"]
     messages = [
         (
@@ -260,7 +248,7 @@ async def generate_weekly_report_with_images() -> tuple[list[str], list[Path]]:
         all_rows.extend(rows)
         title = PERIOD_NAMES[period]
         messages.append(
-            f"<b>{html.escape(TARAMA_LABEL)} - {title}</b>\n\n"
+            f"<b>{html.escape(display_title)} - {title}</b>\n\n"
             f"{signal_lines(rows)}\n\n"
             f"{stats_block(title, rows)}"
         )
@@ -269,13 +257,13 @@ async def generate_weekly_report_with_images() -> tuple[list[str], list[Path]]:
         unknown_period.sort(key=lambda row: (row["change"] is None, -(row["change"] or 0)))
         all_rows.extend(unknown_period)
         messages.append(
-            f"<b>{html.escape(TARAMA_LABEL)} - DIGER</b>\n\n"
+            f"<b>{html.escape(display_title)} - DIGER</b>\n\n"
             f"{signal_lines(unknown_period)}\n\n"
             f"{stats_block('DIGER', unknown_period)}"
         )
 
     if not all_rows:
-        return [f"<b>{html.escape(TARAMA_LABEL)} icin bu hafta sinyal uretilmedi.</b>"], []
+        return [], []
 
     distribution = "\n".join(
         f"- {PERIOD_NAMES[period]}: {len(grouped[period])}"
@@ -284,12 +272,37 @@ async def generate_weekly_report_with_images() -> tuple[list[str], list[Path]]:
     )
     messages.append(
         f"{DIVIDER}\n"
-        f"<b>{html.escape(TARAMA_LABEL)} GENEL TOPLAM</b>\n\n"
+        f"<b>{html.escape(display_title)} GENEL TOPLAM</b>\n\n"
         f"{stats_block('GENEL', all_rows)}\n"
         f"<b>Zaman dilimi dagilimi:</b>\n{distribution}\n"
         f"{DIVIDER}"
     )
     return messages, write_weekly_report_images(display_title, all_rows)
+
+
+async def generate_weekly_report() -> list[str]:
+    messages, _ = await generate_weekly_report_with_images()
+    return messages
+
+
+async def generate_weekly_report_with_images() -> tuple[list[str], list[Path]]:
+    state_file = "state.json"
+    if not os.path.exists(state_file):
+        return ["<b>state.json bulunamadi.</b>"], []
+
+    with open(state_file, "r", encoding="utf-8") as file:
+        state = json.load(file)
+
+    all_messages: list[str] = []
+    all_image_paths: list[Path] = []
+    for strategy_key in STRATEGY_META:
+        messages, image_paths = await build_strategy_report(strategy_key, state)
+        all_messages.extend(messages)
+        all_image_paths.extend(image_paths)
+
+    if not all_messages:
+        return [f"<b>{html.escape(TARAMA_LABEL)} icin bu hafta sinyal uretilmedi.</b>"], []
+    return all_messages, all_image_paths
 
 
 if __name__ == "__main__":

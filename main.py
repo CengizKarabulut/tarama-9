@@ -22,7 +22,7 @@ logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 BRAND_NAME = "StockMarketLab"
-TARAMA_LABEL = "Tarama 9"
+TARAMA_LABEL = "Aylik Bot"
 TIMEFRAME_LABEL = "Aylik"
 FIXED_PERIOD = "1M"
 REPORTS_DIR = Path("reports")
@@ -31,15 +31,15 @@ SUMMARY_ROWS_PER_IMAGE = int(os.getenv("SUMMARY_ROWS_PER_IMAGE", "24"))
 SEND_EMPTY_BUCKET_REPORTS = os.getenv("SEND_EMPTY_BUCKET_REPORTS", "true").lower() == "true"
 
 BUCKETS = [
-    ("macd_cross", "macd_cross", "T1 MACD Cross"),
-    ("h8", "h8", "T2 H8"),
-    ("i9", "i9", "T3 I9"),
-    ("ema", "ema", "T4 EMA"),
-    ("rsi_macd", "rsi_macd", "T5 RSI MACD"),
-    ("new_scan", "new_scan", "T6 Yeni Tarama"),
-    ("smi_macd", "full", "T7 Tam SMI/MACD"),
-    ("smi_macd", "smi", "T8 SMI/MACD"),
-    ("rsi", "rsi", "T9 RSI"),
+    ("macd_cross", "macd_cross", "M-1 - MACD Pozitif Kesisim"),
+    ("h8", "h8", "S-M-1 - SMI/MACD Momentum"),
+    ("i9", "i9", "S-M-V-1 - SMI/MACD Guclu Onay"),
+    ("ema", "ema", "E-V-1 - EMA Trend + Hacim"),
+    ("rsi_macd", "rsi_macd", "R-M-V-1 - RSI + MACD + Hacim"),
+    ("new_scan", "new_scan", "A-M-V-1 - SMA + MACD + Hacim"),
+    ("smi_macd", "full", "S-M-V-2 - SMI/MACD Full"),
+    ("smi_macd", "smi", "S-M-2 - SMI/MACD Erken"),
+    ("rsi", "rsi", "R-V-1 - RSI Momentum"),
 ]
 ENABLED_STRATEGIES = list(dict.fromkeys(strategy for strategy, _, _ in BUCKETS))
 KNOWN_PERIODS = ["15m", "30m", "45m", "1H", "2H", "4H", "1D", "1W", "1M"]
@@ -131,7 +131,7 @@ def send_bucket_summary(
 ):
     now = datetime.now(TZ_TURKEY).strftime("%Y-%m-%d %H:%M")
     ordered_signals = sorted(signals, key=lambda item: str(item.get("symbol", "")))
-    report_label = f"{TARAMA_LABEL} - {TIMEFRAME_LABEL} - {bucket_label}"
+    report_label = f"{TARAMA_LABEL} - {bucket_label}"
 
     if not ordered_signals:
         if not SEND_EMPTY_BUCKET_REPORTS:
@@ -261,21 +261,21 @@ def send_common_scan_summary(scan_result: dict):
     for index, chunk in enumerate(summary_chunks, start=1):
         image_path = create_common_period_report_image(
             brand_name=BRAND_NAME,
-            tarama_label=f"{TARAMA_LABEL} - {TIMEFRAME_LABEL}",
+            tarama_label=TARAMA_LABEL,
             timestamp=now,
             rows=chunk,
             page=index,
             total_pages=len(summary_chunks),
             total_symbols=len(summary_rows),
             output_dir=REPORTS_DIR,
-            summary_title=f"{TARAMA_LABEL} - {TIMEFRAME_LABEL} Coklu Tarama Ozeti",
-            column_title="Taramalar",
-            empty_text="Birden fazla taramada sinyal yok",
-            filename_suffix="coklu-tarama-ozeti",
+            summary_title=f"{TARAMA_LABEL} - Coklu Sinyal Ozeti",
+            column_title="Sinyal Kodlari",
+            empty_text="Birden fazla sinyal kodunda ortak hisse yok",
+            filename_suffix="coklu-sinyal-ozeti",
         )
         caption = (
             f"<b>{BRAND_NAME}</b>\n"
-            f"<b>{TARAMA_LABEL} - {TIMEFRAME_LABEL} - Coklu Tarama Ozeti</b>\n"
+            f"<b>{TARAMA_LABEL} - Coklu Sinyal Ozeti</b>\n"
             f"<code>Liste {index}/{len(summary_chunks)} | {len(chunk)}/{len(summary_rows)} hisse</code>"
         )
         sender.send_photo(str(image_path), caption=caption)

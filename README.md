@@ -1,22 +1,22 @@
-# Tarama 9 - 1M
+# Aylik Bot (1M)
 
-Bu repo Aylik (1M) zaman dilimindeki tum otomatik taramalari calistirir.
+Bu repo Aylik (1M) zaman dilimindeki otomatik sinyal kontrollerini calistirir.
 
 Telegram raporlari StockMarketLab baslikli PNG tablo olarak gonderilir. Cok sayida sinyal geldiginde liste 30'lu gorsel sayfalara bolunur.
 
-Ayni sembol birden fazla taramada cikarsa ayrica Coklu Tarama Ozeti olarak listelenir.
+Ayni sembol birden fazla sinyal kodunda cikarsa ayrica Coklu Sinyal Ozeti olarak listelenir.
 
-Bu repoda calisan sinyal kovasi listesi:
+## Sinyal Kodlari
 
-- T1 MACD Cross
-- T2 H8
-- T3 I9
-- T4 EMA
-- T5 RSI MACD
-- T6 Yeni Tarama
-- T7 Tam SMI/MACD
-- T8 SMI/MACD
-- T9 RSI
+- `M-1`: MACD Pozitif Kesisim. MACD sinyal cizgisini yukari keser ve MACD pozitif bolgede kalir.
+- `S-M-1`: SMI/MACD Momentum. SMI yukari kesisim ve MACD histogram pozitif momentum kosullarini arar.
+- `S-M-V-1`: SMI/MACD Guclu Onay. S-M-1 kosullarina MA200 ustu fiyat ve guclu hacim onayi ekler.
+- `E-V-1`: EMA Trend + Hacim. Kisa EMA yapisi uzun EMA yapisinin ustundedir ve hacim trendi destekler.
+- `R-M-V-1`: RSI + MACD + Hacim. RSI guclenirken MACD yukari kesisim ve hacim artisi birlikte olusur.
+- `A-M-V-1`: SMA + MACD + Hacim. SMA 5/8/21 dizilimi, MACD pozitifligi, RSI araligi ve hacim onayini birlestirir.
+- `S-M-V-2`: SMI/MACD Full. SMI/MACD al sinyaline MA200 ustu fiyat ve hacim filtresi ekler.
+- `S-M-2`: SMI/MACD Erken. SMI ve MACD momentum kesisimlerini temel alan erken sinyaldir.
+- `R-V-1`: RSI Momentum. RSI guc bolgesine gecisi ve yukselis momentumunu izler.
 
 Telegram ayarlari GitHub Actions secrets/variables uzerinden okunur:
 
