@@ -75,19 +75,29 @@
       "price": 2.74,
       "is_full": false
     },
+<<<<<<< Updated upstream
     "DYOBY_1M": {
       "time": "2026-06-01T06:00:00",
       "price": 15.51,
+=======
+    "AKSA_1M": {
+      "time": "2026-06-01T06:00:00",
+      "price": 11.85,
+>>>>>>> Stashed changes
       "is_full": false
     },
     "THYAO_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 322.0,
       "is_full": false
     },
     "TTRAK_1M": {
       "time": "2026-06-01T06:00:00",
       "price": 440.0,
+=======
+      "price": 322.25,
+>>>>>>> Stashed changes
       "is_full": false
     }
   },
@@ -178,6 +188,7 @@
     },
     "BRLSM_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 18.85
     },
     "DGGYO_1M": {
@@ -187,6 +198,17 @@
     "HEKTS_1M": {
       "time": "2026-06-01T06:00:00",
       "price": 4.11
+=======
+      "price": 19.23
+    },
+    "DGGYO_1M": {
+      "time": "2026-06-01T06:00:00",
+      "price": 40.7
+    },
+    "HEKTS_1M": {
+      "time": "2026-06-01T06:00:00",
+      "price": 4.09
+>>>>>>> Stashed changes
     }
   },
   "last_sent_new_scan": {
@@ -248,7 +270,11 @@
     },
     "ESCOM_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 6.43
+=======
+      "price": 6.42
+>>>>>>> Stashed changes
     }
   },
   "last_sent_rsi_macd": {
@@ -318,6 +344,7 @@
     },
     "BRLSM_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 18.85
     },
     "DITAS_1M": {
@@ -335,6 +362,21 @@
     "ODAS_1M": {
       "time": "2026-06-01T06:00:00",
       "price": 9.37
+=======
+      "price": 19.23
+    },
+    "DITAS_1M": {
+      "time": "2026-06-01T06:00:00",
+      "price": 44.3
+    },
+    "ESCOM_1M": {
+      "time": "2026-06-01T06:00:00",
+      "price": 6.42
+    },
+    "ODAS_1M": {
+      "time": "2026-06-01T06:00:00",
+      "price": 9.35
+>>>>>>> Stashed changes
     }
   },
   "last_sent_ema": {
@@ -420,7 +462,11 @@
     },
     "ESCOM_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 6.43
+=======
+      "price": 6.42
+>>>>>>> Stashed changes
     }
   },
   "last_sent_macd_cross": {
@@ -1094,7 +1140,11 @@
     },
     "PEKGY_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 13.73
+=======
+      "price": 13.74
+>>>>>>> Stashed changes
     }
   },
   "last_sent_h8": {
@@ -1252,7 +1302,11 @@
     },
     "KGYO_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 12.31
+=======
+      "price": 12.29
+>>>>>>> Stashed changes
     }
   },
   "last_sent_i9": {
@@ -1302,12 +1356,20 @@
     },
     "ESCOM_1M": {
       "time": "2026-06-01T06:00:00",
+<<<<<<< Updated upstream
       "price": 6.43
+=======
+      "price": 6.42
+>>>>>>> Stashed changes
     }
   },
   "last_successful_scans": {
     "2026-06-22_18:30": "2026-06-22 19:43:50",
     "2026-06-23_09:30": "2026-06-23 09:39:42",
+<<<<<<< Updated upstream
     "2026-06-23_11:00": "2026-06-23 11:16:32"
+=======
+    "2026-06-23_11:00": "2026-06-23 11:23:04"
+>>>>>>> Stashed changes
   }
 }
