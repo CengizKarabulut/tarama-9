@@ -236,6 +236,7 @@ def send_common_scan_summary(scan_result: dict):
     sender = get_telegram_sender()
     now = datetime.now(TZ_TURKEY).strftime("%Y-%m-%d %H:%M")
     symbol_map: dict[str, list[str]] = {}
+    symbol_data: dict[str, dict] = {}
 
     for bucket in scan_result["buckets"]:
         bucket_label = bucket["label"]
@@ -246,6 +247,7 @@ def send_common_scan_summary(scan_result: dict):
                 continue
             seen_in_bucket.add(symbol)
             symbol_map.setdefault(symbol, [])
+            symbol_data.setdefault(symbol, signal)
             if bucket_label not in symbol_map[symbol]:
                 symbol_map[symbol].append(bucket_label)
 
@@ -254,7 +256,16 @@ def send_common_scan_summary(scan_result: dict):
         return
 
     summary_rows = sorted(
-        ({"symbol": symbol, "scans": repeated[symbol]} for symbol in repeated),
+        (
+            {
+                "symbol": symbol,
+                "scans": repeated[symbol],
+                "change": symbol_data.get(symbol, {}).get("change"),
+                "daily_change": symbol_data.get(symbol, {}).get("daily_change", symbol_data.get(symbol, {}).get("change")),
+                "current_price": symbol_data.get(symbol, {}).get("current_price", symbol_data.get(symbol, {}).get("close")),
+            }
+            for symbol in repeated
+        ),
         key=lambda row: (-len(row["scans"]), row["symbol"]),
     )
     summary_chunks = balanced_chunks(summary_rows, SUMMARY_ROWS_PER_IMAGE)
@@ -269,7 +280,7 @@ def send_common_scan_summary(scan_result: dict):
             total_symbols=len(summary_rows),
             output_dir=REPORTS_DIR,
             summary_title=f"{TARAMA_LABEL} - Coklu Sinyal Ozeti",
-            column_title="Sinyal Kodlari",
+            column_title="Tarama Kodlari",
             empty_text="Birden fazla sinyal kodunda ortak hisse yok",
             filename_suffix="coklu-sinyal-ozeti",
         )

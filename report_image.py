@@ -89,6 +89,26 @@ def _format_change(value) -> tuple[str, str]:
     return f"{number:+.2f}%", color
 
 
+def _value(item: dict, *names, default=0):
+    for name in names:
+        value = item.get(name)
+        if value is not None:
+            return value
+    return default
+
+
+def _signal_price(item: dict):
+    return _value(item, "current_price", "close", default=0)
+
+
+def _signal_change(item: dict):
+    return _value(item, "change", default=0)
+
+
+def _signal_daily_change(item: dict):
+    return _value(item, "daily_change", "daily_change_percent", "change", default=0)
+
+
 def create_signal_report_image(
     brand_name: str,
     tarama_label: str,
@@ -105,7 +125,8 @@ def create_signal_report_image(
 ) -> Path:
     rows = list(signals)
     table_rows = max(len(rows), 1)
-    height = TOP_HEIGHT + TABLE_HEADER_HEIGHT + (table_rows * ROW_HEIGHT) + BOTTOM_PADDING
+    row_height = 42
+    height = TOP_HEIGHT + TABLE_HEADER_HEIGHT + (table_rows * row_height) + BOTTOM_PADDING
 
     image = Image.new("RGB", (CANVAS_WIDTH, height), COLOR_BG)
     draw = ImageDraw.Draw(image)
@@ -128,7 +149,7 @@ def create_signal_report_image(
     )
     draw.text((CANVAS_WIDTH - PADDING_X - badge_w + 21, 59), badge, font=FONT_META_BOLD, fill=COLOR_BLUE)
 
-    meta = f"{timestamp}   |   Taranan: {total_scanned}   |   Sinyal: {total_signals}"
+    meta = f"{timestamp}   |   Sinyal: {total_signals}"
     draw.text((PADDING_X, 143), meta, font=FONT_META, fill=COLOR_MUTED)
 
     page_text = f"Liste {page}/{total_pages}"
@@ -140,33 +161,38 @@ def create_signal_report_image(
         radius=14,
         fill=COLOR_HEADER,
     )
-    draw.text((COL_NO, header_y + 12), "No", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
-    draw.text((COL_SYMBOL, header_y + 12), "Sembol", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
-    _right_text(draw, COL_CHANGE_RIGHT, header_y + 12, "Degisim", FONT_TABLE_HEAD, COLOR_BRAND)
-    _right_text(draw, COL_CLOSE_RIGHT, header_y + 12, "Kapanis", FONT_TABLE_HEAD, COLOR_BRAND)
+    col_code = 82
+    col_change_right = 430
+    col_daily_right = 700
+    col_price_right = 1085
+    draw.text((col_code, header_y + 12), "Kod", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
+    _right_text(draw, col_change_right, header_y + 12, "Degisim", FONT_TABLE_HEAD, COLOR_BRAND)
+    _right_text(draw, col_daily_right, header_y + 12, "Gunluk Deg.", FONT_TABLE_HEAD, COLOR_BRAND)
+    _right_text(draw, col_price_right, header_y + 12, "Anlik Fiyat", FONT_TABLE_HEAD, COLOR_BRAND)
 
     row_y = header_y + TABLE_HEADER_HEIGHT
     if not rows:
-        draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + ROW_HEIGHT), fill=COLOR_ROW_ALT)
+        draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
         empty_text = "Bu zaman diliminde sinyal yok"
         empty_w = _text_width(draw, empty_text, FONT_EMPTY)
-        draw.text(((CANVAS_WIDTH - empty_w) / 2, row_y + 4), empty_text, font=FONT_EMPTY, fill=COLOR_MUTED)
+        draw.text(((CANVAS_WIDTH - empty_w) / 2, row_y + 6), empty_text, font=FONT_EMPTY, fill=COLOR_MUTED)
     else:
         for offset, signal in enumerate(rows, start=start_index):
             if (offset - start_index) % 2 == 1:
-                draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + ROW_HEIGHT), fill=COLOR_ROW_ALT)
+                draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
 
             symbol = str(signal.get("symbol", ""))[:12]
-            close = _format_price(signal.get("close", 0))
-            change, change_color = _format_change(signal.get("change", 0))
+            change, change_color = _format_change(_signal_change(signal))
+            daily_change, daily_color = _format_change(_signal_daily_change(signal))
+            price = _format_price(_signal_price(signal))
 
-            draw.text((COL_NO, row_y + 8), f"{offset:>2}", font=FONT_ROW, fill=COLOR_MUTED)
-            draw.text((COL_SYMBOL, row_y + 8), symbol, font=FONT_ROW_BOLD, fill=COLOR_TEXT)
-            _right_text(draw, COL_CHANGE_RIGHT, row_y + 8, change, FONT_ROW_BOLD, change_color)
-            _right_text(draw, COL_CLOSE_RIGHT, row_y + 8, close, FONT_ROW, COLOR_TEXT)
+            draw.text((col_code, row_y + 10), symbol, font=FONT_ROW_BOLD, fill=COLOR_TEXT)
+            _right_text(draw, col_change_right, row_y + 10, change, FONT_ROW_BOLD, change_color)
+            _right_text(draw, col_daily_right, row_y + 10, daily_change, FONT_ROW_BOLD, daily_color)
+            _right_text(draw, col_price_right, row_y + 10, price, FONT_ROW, COLOR_TEXT)
 
-            draw.line((PADDING_X, row_y + ROW_HEIGHT, CANVAS_WIDTH - PADDING_X, row_y + ROW_HEIGHT), fill=COLOR_LINE)
-            row_y += ROW_HEIGHT
+            draw.line((PADDING_X, row_y + row_height, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_LINE)
+            row_y += row_height
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -193,13 +219,13 @@ def create_common_period_report_image(
     total_symbols: int,
     output_dir: Path | str,
     summary_title: str | None = None,
-    column_title: str = "Periyotlar",
+    column_title: str = "Tarama Kodlari",
     empty_text: str = "Birden fazla periyotta sinyal yok",
     filename_suffix: str = "coklu-periyot-ozeti",
 ) -> Path:
     table_rows = list(rows)
     measure = ImageDraw.Draw(Image.new("RGB", (1, 1), COLOR_BG))
-    detail_x = 320
+    detail_x = 800
     detail_max_width = CANVAS_WIDTH - PADDING_X - detail_x
 
     def compact_values(values) -> list[str]:
@@ -265,7 +291,14 @@ def create_common_period_report_image(
         radius=14,
         fill=COLOR_HEADER,
     )
-    draw.text((COL_SYMBOL, header_y + 12), "Sembol", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
+    col_code = 72
+    col_change_right = 350
+    col_daily_right = 545
+    col_price_right = 755
+    draw.text((col_code, header_y + 12), "Kod", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
+    _right_text(draw, col_change_right, header_y + 12, "Degisim", FONT_TABLE_HEAD, COLOR_BRAND)
+    _right_text(draw, col_daily_right, header_y + 12, "Gunluk Deg.", FONT_TABLE_HEAD, COLOR_BRAND)
+    _right_text(draw, col_price_right, header_y + 12, "Anlik Fiyat", FONT_TABLE_HEAD, COLOR_BRAND)
     draw.text((detail_x, header_y + 12), column_title, font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
 
     row_y = header_y + TABLE_HEADER_HEIGHT
@@ -279,7 +312,14 @@ def create_common_period_report_image(
                 draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
 
             symbol = str(row.get("symbol", ""))[:12]
-            draw.text((COL_SYMBOL, row_y + 10), symbol, font=FONT_ROW_BOLD, fill=COLOR_TEXT)
+            change, change_color = _format_change(_signal_change(row))
+            daily_change, daily_color = _format_change(_signal_daily_change(row))
+            price = _format_price(_signal_price(row))
+            draw.text((col_code, row_y + 10), symbol, font=FONT_ROW_BOLD, fill=COLOR_TEXT)
+            _right_text(draw, col_change_right, row_y + 10, change, FONT_ROW_BOLD, change_color)
+            _right_text(draw, col_daily_right, row_y + 10, daily_change, FONT_ROW_BOLD, daily_color)
+            _right_text(draw, col_price_right, row_y + 10, price, FONT_ROW, COLOR_TEXT)
+
             line_y = row_y + 10
             for line in detail_lines:
                 draw.text((detail_x, line_y), line, font=FONT_ROW, fill=COLOR_TEXT)
