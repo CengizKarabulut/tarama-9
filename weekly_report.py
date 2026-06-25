@@ -34,41 +34,41 @@ PERIOD_NAMES = {
 STRATEGY_META = {
     "macd_cross": {
         "state_key": "last_sent_macd_cross",
-        "title": "M-1 - MACD Pozitif Kesisim",
+        "title": "M-1",
     },
     "h8": {
         "state_key": "last_sent_h8",
-        "title": "S-M-1 - SMI/MACD Momentum",
+        "title": "S-M-1",
     },
     "i9": {
         "state_key": "last_sent_i9",
-        "title": "S-M-V-1 - SMI/MACD Guclu Onay",
+        "title": "S-M-V-1",
     },
     "ema": {
         "state_key": "last_sent_ema",
-        "title": "E-V-1 - EMA Trend + Hacim",
+        "title": "E-V-1",
     },
     "rsi_macd": {
         "state_key": "last_sent_rsi_macd",
-        "title": "R-M-V-1 - RSI + MACD + Hacim",
+        "title": "R-M-V-1",
     },
     "new_scan": {
         "state_key": "last_sent_new_scan",
-        "title": "A-M-V-1 - SMA + MACD + Hacim",
+        "title": "A-M-V-1",
     },
     "full": {
         "state_key": "last_sent_smi_macd",
-        "title": "S-M-V-2 - SMI/MACD Full",
+        "title": "S-M-V-2",
         "is_full": True,
     },
     "smi": {
         "state_key": "last_sent_smi_macd",
-        "title": "S-M-2 - SMI/MACD Erken",
+        "title": "S-M-2",
         "is_full": False,
     },
     "rsi": {
         "state_key": "last_sent_rsi",
-        "title": "R-V-1 - RSI Momentum",
+        "title": "R-V-1",
     },
 }
 

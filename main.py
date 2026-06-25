@@ -31,15 +31,15 @@ SUMMARY_ROWS_PER_IMAGE = int(os.getenv("SUMMARY_ROWS_PER_IMAGE", "24"))
 SEND_EMPTY_BUCKET_REPORTS = os.getenv("SEND_EMPTY_BUCKET_REPORTS", "true").lower() == "true"
 
 BUCKETS = [
-    ("macd_cross", "macd_cross", "M-1 - MACD Pozitif Kesisim"),
-    ("h8", "h8", "S-M-1 - SMI/MACD Momentum"),
-    ("i9", "i9", "S-M-V-1 - SMI/MACD Guclu Onay"),
-    ("ema", "ema", "E-V-1 - EMA Trend + Hacim"),
-    ("rsi_macd", "rsi_macd", "R-M-V-1 - RSI + MACD + Hacim"),
-    ("new_scan", "new_scan", "A-M-V-1 - SMA + MACD + Hacim"),
-    ("smi_macd", "full", "S-M-V-2 - SMI/MACD Full"),
-    ("smi_macd", "smi", "S-M-2 - SMI/MACD Erken"),
-    ("rsi", "rsi", "R-V-1 - RSI Momentum"),
+    ("macd_cross", "macd_cross", "M-1"),
+    ("h8", "h8", "S-M-1"),
+    ("i9", "i9", "S-M-V-1"),
+    ("ema", "ema", "E-V-1"),
+    ("rsi_macd", "rsi_macd", "R-M-V-1"),
+    ("new_scan", "new_scan", "A-M-V-1"),
+    ("smi_macd", "full", "S-M-V-2"),
+    ("smi_macd", "smi", "S-M-2"),
+    ("rsi", "rsi", "R-V-1"),
 ]
 ENABLED_STRATEGIES = list(dict.fromkeys(strategy for strategy, _, _ in BUCKETS))
 KNOWN_PERIODS = ["15m", "30m", "45m", "1H", "2H", "4H", "1D", "1W", "1M"]
@@ -253,10 +253,10 @@ def send_common_scan_summary(scan_result: dict):
     if not repeated:
         return
 
-    summary_rows = [
-        {"symbol": symbol, "scans": repeated[symbol]}
-        for symbol in sorted(repeated)
-    ]
+    summary_rows = sorted(
+        ({"symbol": symbol, "scans": repeated[symbol]} for symbol in repeated),
+        key=lambda row: (-len(row["scans"]), row["symbol"]),
+    )
     summary_chunks = balanced_chunks(summary_rows, SUMMARY_ROWS_PER_IMAGE)
     for index, chunk in enumerate(summary_chunks, start=1):
         image_path = create_common_period_report_image(

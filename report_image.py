@@ -198,9 +198,42 @@ def create_common_period_report_image(
     filename_suffix: str = "coklu-periyot-ozeti",
 ) -> Path:
     table_rows = list(rows)
-    visible_rows = max(len(table_rows), 1)
-    row_height = 44
-    height = TOP_HEIGHT + TABLE_HEADER_HEIGHT + (visible_rows * row_height) + BOTTOM_PADDING
+    measure = ImageDraw.Draw(Image.new("RGB", (1, 1), COLOR_BG))
+    detail_x = 320
+    detail_max_width = CANVAS_WIDTH - PADDING_X - detail_x
+
+    def compact_values(values) -> list[str]:
+        compacted = []
+        for value in dict.fromkeys(values or []):
+            code = str(value).split(" - ", 1)[0].strip()
+            if code and code not in compacted:
+                compacted.append(code)
+        return compacted
+
+    def wrap_values(values) -> list[str]:
+        lines = []
+        current = ""
+        for value in compact_values(values):
+            candidate = value if not current else f"{current}, {value}"
+            if _text_width(measure, candidate, FONT_ROW) <= detail_max_width:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+            current = value
+        if current:
+            lines.append(current)
+        return lines or [""]
+
+    prepared_rows = []
+    for row in table_rows:
+        detail_values = row.get("periods", row.get("scans", []))
+        detail_lines = wrap_values(detail_values)
+        dynamic_height = max(44, 14 + len(detail_lines) * 28)
+        prepared_rows.append((row, detail_lines, dynamic_height))
+
+    visible_height = sum(item[2] for item in prepared_rows) if prepared_rows else 44
+    height = TOP_HEIGHT + TABLE_HEADER_HEIGHT + visible_height + BOTTOM_PADDING
 
     image = Image.new("RGB", (CANVAS_WIDTH, height), COLOR_BG)
     draw = ImageDraw.Draw(image)
@@ -233,22 +266,24 @@ def create_common_period_report_image(
         fill=COLOR_HEADER,
     )
     draw.text((COL_SYMBOL, header_y + 12), "Sembol", font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
-    draw.text((320, header_y + 12), column_title, font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
+    draw.text((detail_x, header_y + 12), column_title, font=FONT_TABLE_HEAD, fill=COLOR_BRAND)
 
     row_y = header_y + TABLE_HEADER_HEIGHT
-    if not table_rows:
-        draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
+    if not prepared_rows:
+        draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + 44), fill=COLOR_ROW_ALT)
         empty_w = _text_width(draw, empty_text, FONT_EMPTY)
         draw.text(((CANVAS_WIDTH - empty_w) / 2, row_y + 6), empty_text, font=FONT_EMPTY, fill=COLOR_MUTED)
     else:
-        for index, row in enumerate(table_rows):
+        for index, (row, detail_lines, row_height) in enumerate(prepared_rows):
             if index % 2 == 1:
                 draw.rectangle((PADDING_X, row_y, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_ROW_ALT)
 
             symbol = str(row.get("symbol", ""))[:12]
-            periods = ", ".join(dict.fromkeys(row.get("periods", row.get("scans", []))))
             draw.text((COL_SYMBOL, row_y + 10), symbol, font=FONT_ROW_BOLD, fill=COLOR_TEXT)
-            draw.text((320, row_y + 10), periods, font=FONT_ROW, fill=COLOR_TEXT)
+            line_y = row_y + 10
+            for line in detail_lines:
+                draw.text((detail_x, line_y), line, font=FONT_ROW, fill=COLOR_TEXT)
+                line_y += 28
             draw.line((PADDING_X, row_y + row_height, CANVAS_WIDTH - PADDING_X, row_y + row_height), fill=COLOR_LINE)
             row_y += row_height
 
